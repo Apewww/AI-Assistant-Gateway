@@ -20,14 +20,38 @@ function TypingIndicator() {
   );
 }
 
-export default function ChatFeed({ messages, sending }: { messages: Message[]; sending: boolean }) {
+function StreamingBubble({ content }: { content: string }) {
+  return (
+    <div className="animate-fade-in flex w-full justify-start">
+      <div className="flex max-w-[80%] flex-col gap-1 sm:max-w-[70%] items-start">
+        <div className="rounded-2xl rounded-bl-md border border-border bg-bg-ai-msg px-4 py-2.5 text-sm leading-relaxed text-text-primary">
+          {content || <TypingIndicator />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function ChatFeed({
+  messages,
+  sending,
+  streamingContent,
+  onEditMessage,
+  onDeleteMessage,
+}: {
+  messages: Message[];
+  sending: boolean;
+  streamingContent?: string;
+  onEditMessage?: (id: string, content: string) => void;
+  onDeleteMessage?: (id: string) => void;
+}) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, sending]);
+  }, [messages, sending, streamingContent]);
 
-  if (messages.length === 0 && !sending) {
+  if (messages.length === 0 && !sending && !streamingContent) {
     return (
       <div className="flex flex-1 items-center justify-center px-4">
         <div className="text-center">
@@ -61,9 +85,18 @@ export default function ChatFeed({ messages, sending }: { messages: Message[]; s
     <div className="flex-1 overflow-y-auto px-4 py-6">
       <div className="mx-auto flex max-w-3xl flex-col gap-4">
         {messages.map((msg) => (
-          <MessageBubble key={msg.id} message={msg} />
+          <MessageBubble
+            key={msg.id}
+            message={msg}
+            onEdit={onEditMessage}
+            onDelete={msg.role === "user" ? onDeleteMessage : undefined}
+          />
         ))}
-        {sending && <TypingIndicator />}
+        {streamingContent != null ? (
+          <StreamingBubble content={streamingContent} />
+        ) : sending ? (
+          <TypingIndicator />
+        ) : null}
         <div ref={bottomRef} />
       </div>
     </div>

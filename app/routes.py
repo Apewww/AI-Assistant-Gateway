@@ -1,6 +1,7 @@
 import json
 import logging
 from fastapi import APIRouter, HTTPException, status
+from fastapi.responses import StreamingResponse
 from openai import OpenAI, APIError
 
 from app.config import (
@@ -110,10 +111,11 @@ async def chat_message(request: ChatRequest):
         messages.append({"role": "user", "content": request.message})
 
         response_text = ""
+        active_model = request.model or MODEL
 
         for _ in range(MAX_TOOL_CALLS):
             response = client.chat.completions.create(
-                model=MODEL,
+                model=active_model,
                 messages=messages,
                 tools=TOOLS,
                 tool_choice="auto",
@@ -215,3 +217,193 @@ async def chat_message(request: ChatRequest):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=detail,
         )
+
+
+def _process_tool_calls(message, content, messages, tool_calls_list):
+    """Execute tool calls and append results to messages. Shared helper."""
+    tool_calls_payload = [
+        {
+            "id": tc.id,
+            "type": "function",
+            "function": {"name": tc.function.name, "arguments": tc.function.arguments},
+        }
+        for tc in message.tool_calls
+    ]
+    messages.append({
+        "role": "assistant",
+        "content": content,
+        "tool_calls": tool_calls_payload,
+    })
+    for tool_call in message.tool_calls:
+        function_name = tool_call.function.name
+        function_args = json.loads(tool_call.function.arguments)
+        if function_name == "get_current_weather":
+            result = get_current_weather(**function_args)
+        elif function_name == "control_audio_player":
+            result = control_audio_player(**function_args)
+        elif function_name == "get_portfolio_info":
+            result = get_portfolio_info(**function_args)
+        else:
+            result = f"Error: Function {function_name} not found."
+        messages.append({
+            "role": "tool",
+            "tool_call_id": tool_call.id,
+            "name": function_name,
+            "content": result,
+        })
+    return messages
+
+
+@router.post("/api/v1/chat/stream")
+async def chat_stream(request: ChatRequest):
+    check_rate_limit(request.session_id)
+
+    action_triggered_var.set(None)
+    history = session_store.get_history(request.session_id)
+
+    api_key = OPENROUTER_API_KEY
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="OPENROUTER_API_KEY belum dikonfigurasi di file .env.",
+        )
+
+    client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=api_key)
+
+    def generate():
+        nonlocal history
+        active_model = request.model or MODEL
+        full_response = ""
+        action = None
+
+        try:
+            messages = [
+                {"role": "system", "content": get_system_instruction(request.source_platform, AI_MODE)}
+            ]
+            for msg in history:
+                role = "assistant" if msg["role"] == "model" else msg["role"]
+                messages.append({"role": role, "content": msg["message"]})
+            messages.append({"role": "user", "content": request.message})
+
+            for _ in range(MAX_TOOL_CALLS):
+                stream = client.chat.completions.create(
+                    model=active_model,
+                    messages=messages,
+                    tools=TOOLS,
+                    tool_choice="auto",
+                    temperature=TEMPERATURE,
+                    stream=True,
+                )
+
+                content_chunks = []
+                tool_calls_acc = {}
+                finish_reason = None
+
+                for chunk in stream:
+                    if not chunk.choices:
+                        continue
+                    delta = chunk.choices[0].delta
+                    finish_reason = chunk.choices[0].finish_reason
+
+                    if delta.content:
+                        content_chunks.append(delta.content)
+                        yield f"data: {json.dumps({'type': 'text', 'content': delta.content})}\n\n"
+
+                    if delta.tool_calls:
+                        for tc in delta.tool_calls:
+                            idx = tc.index
+                            if idx not in tool_calls_acc:
+                                tool_calls_acc[idx] = {"id": "", "function": {"name": "", "arguments": ""}}
+                            if tc.id:
+                                tool_calls_acc[idx]["id"] = tc.id
+                            if tc.function:
+                                if tc.function.name:
+                                    tool_calls_acc[idx]["function"]["name"] = tc.function.name
+                                if tc.function.arguments:
+                                    tool_calls_acc[idx]["function"]["arguments"] += tc.function.arguments
+
+                    if finish_reason in ("stop", "tool_calls"):
+                        break
+
+                acc_text = "".join(content_chunks)
+                is_model_error = any(p.search(acc_text) for p in ERROR_PATTERNS)
+                if is_model_error:
+                    full_response = ""
+                    break
+
+                if finish_reason == "stop":
+                    full_response = acc_text
+                    break
+
+                # Process tool calls
+                if not tool_calls_acc:
+                    full_response = acc_text
+                    break
+
+                tool_calls_list = list(tool_calls_acc.values())
+                tool_calls_payload = [
+                    {
+                        "id": tc["id"],
+                        "type": "function",
+                        "function": {
+                            "name": tc["function"]["name"],
+                            "arguments": tc["function"]["arguments"],
+                        },
+                    }
+                    for tc in tool_calls_list
+                ]
+                messages.append({
+                    "role": "assistant",
+                    "content": acc_text,
+                    "tool_calls": tool_calls_payload,
+                })
+
+                for tc_data in tool_calls_list:
+                    function_name = tc_data["function"]["name"]
+                    function_args = json.loads(tc_data["function"]["arguments"])
+                    yield f"data: {json.dumps({'type': 'tool_call', 'name': function_name, 'args': function_args})}\n\n"
+                    if function_name == "get_current_weather":
+                        result = get_current_weather(**function_args)
+                    elif function_name == "control_audio_player":
+                        result = control_audio_player(**function_args)
+                    elif function_name == "get_portfolio_info":
+                        result = get_portfolio_info(**function_args)
+                    else:
+                        result = f"Error: Function {function_name} not found."
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc_data["id"],
+                        "name": function_name,
+                        "content": result,
+                    })
+                continue
+            else:
+                if not full_response:
+                    full_response = "Maaf, terjadi kesalahan komunikasi dengan model AI. Silakan coba lagi."
+
+            if not full_response or full_response == "Maaf, terjadi kesalahan komunikasi dengan model AI. Silakan coba lagi.":
+                if not full_response:
+                    full_response = "Maaf, terjadi kesalahan komunikasi dengan model AI. Silakan coba lagi."
+
+            history.append({"role": "user", "message": request.message})
+            history.append({"role": "model", "message": full_response})
+            session_store.save_history(request.session_id, history)
+
+            action = action_triggered_var.get()
+            yield f"data: {json.dumps({'type': 'done', 'model': active_model, 'action_triggered': action})}\n\n"
+
+        except Exception as e:
+            logging.error(f"Error in stream: {e}")
+            err_str = str(e)
+            is_image_error = any(p.search(err_str) for p in ERROR_PATTERNS)
+            if is_image_error:
+                msg = "Asisten AI saat ini tidak mendukung pemrosesan gambar. Silakan kirim pertanyaan berupa teks."
+            else:
+                msg = f"Terjadi kesalahan saat memproses pesan: {err_str}"
+            yield f"data: {json.dumps({'type': 'error', 'message': msg})}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

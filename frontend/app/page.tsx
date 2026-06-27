@@ -2,12 +2,17 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import type { Session, Message } from "@/types";
-import { sendMessage } from "@/lib/api";
+import { AVAILABLE_MODELS } from "@/types";
+import { sendMessage, sendMessageStream } from "@/lib/api";
 import { loadSessions, saveSessions, loadActiveId, saveActiveId } from "@/lib/persist";
 import Sidebar from "@/components/Sidebar";
 import Header from "@/components/Header";
 import ChatFeed from "@/components/ChatFeed";
 import InputBar from "@/components/InputBar";
+
+const MODEL_KEY = "selected_model";
+const CONTEXT_LIMIT = 32000;
+const ESTIMATED_CHARS_PER_TOKEN = 4;
 
 function createId(): string {
   try {
@@ -26,13 +31,41 @@ function createSession(name?: string): Session {
   };
 }
 
+function estimateTokens(text: string): number {
+  return Math.ceil(text.length / ESTIMATED_CHARS_PER_TOKEN);
+}
+
+function sessionTokenCount(messages: Message[]): number {
+  return messages.reduce((sum, m) => sum + estimateTokens(m.content) + 4, 0);
+}
+
+function loadModel(): string {
+  if (typeof window === "undefined") return AVAILABLE_MODELS[0].id;
+  try {
+    return localStorage.getItem(MODEL_KEY) || AVAILABLE_MODELS[0].id;
+  } catch {
+    return AVAILABLE_MODELS[0].id;
+  }
+}
+
+function saveModel(m: string) {
+  try {
+    localStorage.setItem(MODEL_KEY, m);
+  } catch {
+    // storage unavailable
+  }
+}
+
 export default function Home() {
   const [sessions, setSessions] = useState<Session[]>([createSession()]);
   const [activeId, setActiveId] = useState<string>("");
   const [hydrated, setHydrated] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sendingSessions, setSendingSessions] = useState<Record<string, boolean>>({});
+  const [streamingContent, setStreamingContent] = useState<string | null>(null);
+  const [model, setModel] = useState(loadModel());
   const activeIdRef = useRef(activeId);
+  const abortRef = useRef<AbortController | null>(null);
   activeIdRef.current = activeId;
 
   const activeSession = sessions.find((s) => s.id === activeId) ?? sessions[0];
@@ -61,12 +94,14 @@ export default function Home() {
   }, [activeId, hydrated]);
 
   const handleNewChat = useCallback(() => {
+    abortRef.current?.abort();
     const newSession = createSession();
     setSessions((prev) => [newSession, ...prev]);
     setActiveId(newSession.id);
   }, []);
 
   const handleSelect = useCallback((id: string) => {
+    abortRef.current?.abort();
     setActiveId(id);
   }, []);
 
@@ -77,6 +112,7 @@ export default function Home() {
   }, []);
 
   const handleDelete = useCallback((id: string) => {
+    abortRef.current?.abort();
     setSessions((prev) => {
       const remaining = prev.filter((s) => s.id !== id);
       if (remaining.length === 0) {
@@ -88,6 +124,35 @@ export default function Home() {
       }
       return remaining;
     });
+  }, []);
+
+  const handleEditMessage = useCallback((msgId: string, content: string) => {
+    const userId = activeIdRef.current;
+    setSessions((prev) =>
+      prev.map((s) => {
+        if (s.id !== userId) return s;
+        const msgs = s.messages.map((m) =>
+          m.id === msgId ? { ...m, content, timestamp: Date.now() } : m,
+        );
+        return { ...s, messages: msgs };
+      }),
+    );
+  }, []);
+
+  const handleDeleteMessage = useCallback((msgId: string) => {
+    const userId = activeIdRef.current;
+    setSessions((prev) =>
+      prev.map((s) => {
+        if (s.id !== userId) return s;
+        const msgs = s.messages.filter((m) => m.id !== msgId);
+        return { ...s, messages: msgs };
+      }),
+    );
+  }, []);
+
+  const handleModelChange = useCallback((m: string) => {
+    setModel(m);
+    saveModel(m);
   }, []);
 
   const handleSend = useCallback(async (text: string) => {
@@ -113,47 +178,111 @@ export default function Home() {
     );
 
     setSendingSessions((prev) => ({ ...prev, [userId]: true }));
+    setStreamingContent("");
+
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     try {
-      const res = await sendMessage({
-        session_id: userId,
-        source_platform: "web_porto",
-        message: text,
-      });
+      let collected = "";
 
-      const aiMsg: Message = {
-        id: createId(),
-        role: "assistant",
-        content: res.content,
-        timestamp: Date.now(),
-      };
-
-      setSessions((prev) =>
-        prev.map((s) =>
-          s.id === userId
-            ? { ...s, messages: [...s.messages, aiMsg] }
-            : s,
-        ),
+      await sendMessageStream(
+        {
+          session_id: userId,
+          source_platform: "web_porto",
+          message: text,
+          model,
+        },
+        {
+          onText: (chunk) => {
+            collected += chunk;
+            setStreamingContent(collected);
+          },
+          onDone: () => {
+            const aiMsg: Message = {
+              id: createId(),
+              role: "assistant",
+              content: collected,
+              timestamp: Date.now(),
+            };
+            setSessions((prev) =>
+              prev.map((s) =>
+                s.id === userId
+                  ? { ...s, messages: [...s.messages, aiMsg] }
+                  : s,
+              ),
+            );
+            setStreamingContent(null);
+          },
+          onError: (msg) => {
+            const errMsg: Message = {
+              id: createId(),
+              role: "assistant",
+              content: msg,
+              timestamp: Date.now(),
+            };
+            setSessions((prev) =>
+              prev.map((s) =>
+                s.id === userId
+                  ? { ...s, messages: [...s.messages, errMsg] }
+                  : s,
+              ),
+            );
+            setStreamingContent(null);
+          },
+        },
+        controller.signal,
       );
-    } catch (e) {
+
+      // If stream ended without done/error event (e.g. abort), clean up
+      setStreamingContent((cur) => {
+        if (cur != null) {
+          // Stream ended but no done event; add what we have
+          const aiMsg: Message = {
+            id: createId(),
+            role: "assistant",
+            content: collected,
+            timestamp: Date.now(),
+          };
+          setSessions((prev) =>
+            prev.map((s) =>
+              s.id === userId
+                ? { ...s, messages: [...s.messages, aiMsg] }
+                : s,
+            ),
+          );
+        }
+        return null;
+      });
+    } catch (e: unknown) {
+      if (e instanceof DOMException && e.name === "AbortError") {
+        setStreamingContent(null);
+        return;
+      }
+      const msg = e instanceof Error ? e.message : "Sorry, the AI service is currently unavailable. Please try again.";
       const errMsg: Message = {
         id: createId(),
         role: "assistant",
-        content: e instanceof Error ? e.message : "Sorry, the AI service is currently unavailable. Please try again.",
+        content: msg,
         timestamp: Date.now(),
       };
-
       setSessions((prev) =>
         prev.map((s) =>
-          s.id === userId
-            ? { ...s, messages: [...s.messages, errMsg] }
-            : s,
+          s.id === userId ? { ...s, messages: [...s.messages, errMsg] } : s,
         ),
       );
+      setStreamingContent(null);
     } finally {
       setSendingSessions((prev) => ({ ...prev, [userId]: false }));
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+      }
     }
-  }, []);
+  }, [model]);
+
+  const tokens = sessionTokenCount(activeSession.messages);
+  const tokenPct = Math.min((tokens / CONTEXT_LIMIT) * 100, 100);
+  const tokenWarning = tokenPct > 75;
 
   return (
     <div className="flex h-full">
@@ -166,6 +295,8 @@ export default function Home() {
         onNewChat={handleNewChat}
         onRename={handleRename}
         onDelete={handleDelete}
+        model={model}
+        onModelChange={handleModelChange}
       />
 
       <div className="flex flex-1 flex-col min-w-0">
@@ -173,8 +304,46 @@ export default function Home() {
           name={activeSession.name}
           onToggleSidebar={() => setSidebarOpen((v) => !v)}
         />
-        <ChatFeed messages={activeSession.messages} sending={!!sendingSessions[activeId]} />
-        <InputBar onSend={handleSend} disabled={!!sendingSessions[activeId]} />
+        <div className="flex items-center justify-center gap-3 px-4 py-1.5">
+          <div className="flex items-center gap-2 text-[11px] text-text-muted">
+            <div className="h-1 w-24 overflow-hidden rounded-full bg-bg-surface">
+              <div
+                className={`h-full rounded-full transition-all ${
+                  tokenWarning ? "bg-danger" : "bg-accent"
+                }`}
+                style={{ width: `${tokenPct}%` }}
+              />
+            </div>
+            <span className={tokenWarning ? "text-danger" : ""}>
+              {tokens.toLocaleString()} / {CONTEXT_LIMIT.toLocaleString()} tokens
+            </span>
+            {tokenWarning && (
+              <button
+                onClick={() => {
+                  const userId = activeIdRef.current;
+                  setSessions((prev) =>
+                    prev.map((s) =>
+                      s.id === userId
+                        ? { ...s, messages: s.messages.slice(-2) }
+                        : s,
+                    ),
+                  );
+                }}
+                className="ml-1 rounded border border-border px-2 py-0.5 text-[11px] text-text-muted hover:bg-bg-hover hover:text-text-primary"
+              >
+                Clear context
+              </button>
+            )}
+          </div>
+        </div>
+        <ChatFeed
+          messages={activeSession.messages}
+          sending={!!sendingSessions[activeId]}
+          streamingContent={streamingContent ?? undefined}
+          onEditMessage={handleEditMessage}
+          onDeleteMessage={handleDeleteMessage}
+        />
+        <InputBar onSend={handleSend} disabled={!!sendingSessions[activeId] || streamingContent != null} />
       </div>
     </div>
   );

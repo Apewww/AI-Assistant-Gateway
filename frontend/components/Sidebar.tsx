@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { Session } from "@/types";
+import ModelSelector from "./ModelSelector";
 
 export default function Sidebar({
   sessions,
@@ -12,6 +13,8 @@ export default function Sidebar({
   onNewChat,
   onRename,
   onDelete,
+  model,
+  onModelChange,
 }: {
   sessions: Session[];
   activeId: string;
@@ -21,6 +24,8 @@ export default function Sidebar({
   onNewChat: () => void;
   onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
+  model: string;
+  onModelChange: (model: string) => void;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
@@ -136,6 +141,8 @@ export default function Sidebar({
             );
           })}
         </div>
+
+        <ModelSelector value={model} onChange={onModelChange} />
 
         <div className="border-t border-border p-3">
           <a

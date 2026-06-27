@@ -6,6 +6,7 @@ class ChatRequest(BaseModel):
     session_id: str = Field(..., description="Unique identifier for the session")
     source_platform: str = Field(..., description="Platform sending the message (e.g. web_cuacakita, web_porto, audio_stream)")
     message: str = Field(..., description="The message content from the user")
+    model: Optional[str] = Field(default=None, description="Model override (falls back to env MODEL)")
 
 
 class ActionTrigger(BaseModel):
