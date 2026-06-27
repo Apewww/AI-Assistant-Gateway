@@ -29,6 +29,17 @@ export interface ApiChatResponse {
   action_triggered: ActionTrigger | null;
 }
 
+export interface ModelsResponse {
+  models: Array<{ id: string; name: string; pricing: Record<string, string> }>;
+  total: number;
+}
+
+export async function fetchModels(): Promise<ModelsResponse> {
+  const res = await fetch(`${getApiBase()}/api/v1/models`);
+  if (!res.ok) throw new Error(`Failed to fetch models: HTTP ${res.status}`);
+  return res.json();
+}
+
 export interface StreamEvents {
   onText?: (text: string) => void;
   onToolCall?: (name: string, args: unknown) => void;

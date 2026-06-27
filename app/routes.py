@@ -1,5 +1,7 @@
 import json
 import logging
+import time
+import urllib.request
 from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import StreamingResponse
 from openai import OpenAI, APIError
@@ -22,6 +24,10 @@ from app.tools.audio import control_audio_player, action_triggered_var
 from app.tools.portfolio import get_portfolio_info
 
 router = APIRouter()
+
+# In-memory cache for model list
+_models_cache = {"data": None, "timestamp": 0}
+_MODELS_CACHE_TTL = 300  # 5 minutes
 
 TOOLS = [
     {
@@ -80,6 +86,54 @@ TOOLS = [
         },
     },
 ]
+
+
+@router.get("/api/v1/models")
+async def list_models():
+    global _models_cache
+    now = time.time()
+
+    if _models_cache["data"] and now - _models_cache["timestamp"] < _MODELS_CACHE_TTL:
+        return _models_cache["data"]
+
+    try:
+        req = urllib.request.Request(
+            f"{OPENROUTER_BASE_URL}/models",
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            body = json.loads(resp.read().decode())
+
+        models = body.get("data", [])
+        free = [
+            {
+                "id": m["id"],
+                "name": m.get("name", m["id"]),
+                "pricing": m.get("pricing", {}),
+            }
+            for m in models
+            if m.get("pricing", {}).get("prompt") == "0"
+        ]
+        free.sort(key=lambda m: m["name"].lower())
+
+        result = {"models": free, "total": len(free)}
+        _models_cache = {"data": result, "timestamp": now}
+        return result
+
+    except Exception as e:
+        logging.error(f"Failed to fetch models from OpenRouter: {e}")
+        fallback = {
+            "models": [
+                {"id": "google/gemini-2.0-flash-exp:free", "name": "Gemini 2.0 Flash (free)", "pricing": {"prompt": "0", "completion": "0"}},
+                {"id": "openai/gpt-4o-mini", "name": "GPT-4o Mini", "pricing": {"prompt": "0", "completion": "0"}},
+                {"id": "anthropic/claude-3-haiku", "name": "Claude 3 Haiku", "pricing": {"prompt": "0", "completion": "0"}},
+                {"id": "meta-llama/llama-3-70b-instruct", "name": "Llama 3 70B Instruct", "pricing": {"prompt": "0", "completion": "0"}},
+                {"id": "mistralai/mistral-7b-instruct", "name": "Mistral 7B Instruct", "pricing": {"prompt": "0", "completion": "0"}},
+                {"id": "qwen/qwen-2.5-72b-instruct", "name": "Qwen 2.5 72B Instruct", "pricing": {"prompt": "0", "completion": "0"}},
+            ],
+            "total": 6,
+        }
+        return fallback
 
 
 @router.post("/api/v1/chat/message", response_model=ChatResponse)

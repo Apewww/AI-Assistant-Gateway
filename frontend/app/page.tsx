@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import type { Session, Message } from "@/types";
-import { AVAILABLE_MODELS } from "@/types";
+import { FALLBACK_MODELS } from "@/types";
 import { sendMessage, sendMessageStream } from "@/lib/api";
 import { loadSessions, saveSessions, loadActiveId, saveActiveId } from "@/lib/persist";
 import Sidebar from "@/components/Sidebar";
@@ -40,11 +40,11 @@ function sessionTokenCount(messages: Message[]): number {
 }
 
 function loadModel(): string {
-  if (typeof window === "undefined") return AVAILABLE_MODELS[0].id;
+  if (typeof window === "undefined") return FALLBACK_MODELS[0].id;
   try {
-    return localStorage.getItem(MODEL_KEY) || AVAILABLE_MODELS[0].id;
+    return localStorage.getItem(MODEL_KEY) || FALLBACK_MODELS[0].id;
   } catch {
-    return AVAILABLE_MODELS[0].id;
+    return FALLBACK_MODELS[0].id;
   }
 }
 
