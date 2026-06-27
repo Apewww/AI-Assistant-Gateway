@@ -61,16 +61,16 @@ function saveModel(m: string) {
 }
 
 function loadTemperature(): number {
-  if (typeof window === "undefined") return 0.7;
+  if (typeof window === "undefined") return 0.8;
   try {
     const v = localStorage.getItem(TEMP_KEY);
     if (v) {
       const n = parseFloat(v);
       if (TEMP_STEPS.includes(n as typeof TEMP_STEPS[number])) return n;
     }
-    return 0.7;
+    return 0.8;
   } catch {
-    return 0.7;
+    return 0.8;
   }
 }
 
@@ -83,13 +83,13 @@ function saveTemperature(t: number) {
 }
 
 function loadReasoning(): string {
-  if (typeof window === "undefined") return "";
+  if (typeof window === "undefined") return "low";
   try {
     const v = localStorage.getItem(REASONING_KEY);
     if (v && REASONING_OPTIONS.includes(v as ReasoningEffort)) return v;
-    return "";
+    return "low";
   } catch {
-    return "";
+    return "low";
   }
 }
 
@@ -109,8 +109,8 @@ export default function Home() {
   const [sendingSessions, setSendingSessions] = useState<Record<string, boolean>>({});
   const [streamingContent, setStreamingContent] = useState<string | null>(null);
   const [model, setModel] = useState(FALLBACK_MODELS[0].id);
-  const [temperature, setTemperature] = useState(0.7);
-  const [reasoningEffort, setReasoningEffort] = useState("");
+  const [temperature, setTemperature] = useState(0.8);
+  const [reasoningEffort, setReasoningEffort] = useState("low");
   const [models, setModels] = useState<ModelOption[]>(FALLBACK_MODELS);
   const [attachedFile, setAttachedFile] = useState<{ file_id: string; blobUrl: string; name: string; isImage: boolean } | null>(null);
   const activeIdRef = useRef(activeId);
@@ -405,7 +405,7 @@ export default function Home() {
           name={activeSession.name}
           onToggleSidebar={() => setSidebarOpen((v) => !v)}
         />
-        <div className="flex items-center justify-center gap-2.5 border-b border-border-soft px-6 py-1.5">
+        <div className="flex items-center justify-center gap-2 border-b border-border-soft px-4 py-1.5 sm:gap-2.5 sm:px-6">
           <svg className="size-3.5 shrink-0 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
           </svg>

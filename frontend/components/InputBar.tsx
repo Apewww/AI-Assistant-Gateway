@@ -75,7 +75,7 @@ export default function InputBar({
   const tempIndex = TEMP_STEPS.indexOf(temperature as typeof TEMP_STEPS[number]);
 
   return (
-    <div className="border-t border-border-soft bg-bg-primary px-6 py-4">
+    <div className="border-t border-border-soft bg-bg-primary px-4 py-4 sm:px-6">
       {showOptions && (
         <div className="mx-auto mb-3 max-w-2xl space-y-2">
           {/* Model selector */}
@@ -97,7 +97,7 @@ export default function InputBar({
             </svg>
           </div>
 
-          <div className="flex items-start gap-3">
+          <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-start sm:gap-3">
             {/* Temperature */}
             <div className="flex-1">
               <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted/60">

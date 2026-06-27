@@ -368,7 +368,7 @@ async def chat_message(request: ChatRequest):
         if is_image_error:
             detail = "Asisten AI saat ini tidak mendukung pemrosesan gambar. Silakan kirim pertanyaan berupa teks."
         else:
-            detail = f"Terjadi kesalahan saat memproses pesan: {err_str}"
+            detail = "Terjadi kesalahan"
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=detail,
@@ -569,7 +569,7 @@ async def chat_stream(request: ChatRequest):
             if is_image_error:
                 msg = "Asisten AI saat ini tidak mendukung pemrosesan gambar. Silakan kirim pertanyaan berupa teks."
             else:
-                msg = f"Terjadi kesalahan saat memproses pesan: {err_str}"
+                msg = "Terjadi kesalahan"
             yield f"data: {json.dumps({'type': 'error', 'message': msg})}\n\n"
 
     return StreamingResponse(
