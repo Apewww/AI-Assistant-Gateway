@@ -4,16 +4,37 @@ import { useEffect, useRef } from "react";
 import type { Message } from "@/types";
 import MessageBubble from "./MessageBubble";
 
+function MessageAvatar({ role }: { role: "user" | "assistant" }) {
+  return (
+    <div
+      className={`flex size-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${
+        role === "user"
+          ? "bg-accent/15 text-accent"
+          : "bg-[rgba(99,102,241,0.15)] text-[#818CF8]"
+      }`}
+    >
+      {role === "user" ? "U" : "AI"}
+    </div>
+  );
+}
+
+function TypingDots() {
+  return (
+    <div className="flex items-center gap-1">
+      <span className="typing-dot inline-block size-[7px] rounded-full bg-text-muted" style={{ animationDelay: "0s" }} />
+      <span className="typing-dot inline-block size-[7px] rounded-full bg-text-muted" style={{ animationDelay: "0.2s" }} />
+      <span className="typing-dot inline-block size-[7px] rounded-full bg-text-muted" style={{ animationDelay: "0.4s" }} />
+    </div>
+  );
+}
+
 function TypingIndicator() {
   return (
     <div className="animate-fade-in flex w-full justify-start">
-      <div className="flex max-w-[80%] flex-col gap-1 sm:max-w-[70%] items-start">
-        <div className="rounded-2xl rounded-bl-md border border-border bg-bg-ai-msg px-4 py-3.5">
-          <div className="flex items-center gap-1">
-            <span className="typing-dot inline-block size-1.5 rounded-full bg-text-secondary" style={{ animationDelay: "0s" }} />
-            <span className="typing-dot inline-block size-1.5 rounded-full bg-text-secondary" style={{ animationDelay: "0.2s" }} />
-            <span className="typing-dot inline-block size-1.5 rounded-full bg-text-secondary" style={{ animationDelay: "0.4s" }} />
-          </div>
+      <div className="flex max-w-[80%] items-start gap-3 sm:max-w-[70%]">
+        <MessageAvatar role="assistant" />
+        <div className="rounded-2xl rounded-bl-md border border-border-soft bg-bg-surface px-4 py-3.5">
+          <TypingDots />
         </div>
       </div>
     </div>
@@ -23,16 +44,19 @@ function TypingIndicator() {
 function StreamingBubble({ content }: { content: string }) {
   return (
     <div className="animate-fade-in flex w-full justify-start">
-      <div className="flex max-w-[80%] flex-col gap-1 sm:max-w-[70%] items-start">
-        <div className="rounded-2xl rounded-bl-md border border-border bg-bg-ai-msg px-4 py-2.5 text-sm leading-relaxed text-text-primary">
-          {content ? (
-            <span>
-              {content}
-              <span className="inline-block h-[1em] w-[2px] animate-pulse bg-accent align-text-bottom ml-0.5" />
-            </span>
-          ) : (
-            <TypingIndicator />
-          )}
+      <div className="flex max-w-[80%] items-start gap-3 sm:max-w-[70%]">
+        <MessageAvatar role="assistant" />
+        <div>
+          <div className="rounded-2xl rounded-bl-md border border-border-soft bg-bg-surface px-4 py-2.5 text-sm leading-relaxed text-text-primary">
+            {content ? (
+              <span>
+                {content}
+                <span className="inline-block h-[1.1em] w-[2px] animate-[blink_0.8s_step-end_infinite] bg-accent align-text-bottom ml-0.5" />
+              </span>
+            ) : (
+              <TypingDots />
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -62,7 +86,7 @@ export default function ChatFeed({
     return (
       <div className="flex flex-1 items-center justify-center px-4">
         <div className="text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-bg-surface border border-border">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-bg-surface border border-border-soft">
             <svg
               className="h-7 w-7 text-accent"
               fill="none"
@@ -89,15 +113,30 @@ export default function ChatFeed({
   }
 
   return (
-    <div className="flex-1 overflow-y-auto px-4 py-6">
-      <div className="mx-auto flex max-w-3xl flex-col gap-4">
+    <div className="flex-1 overflow-y-auto px-6 py-5">
+      <div className="mx-auto flex max-w-3xl flex-col gap-5">
         {messages.map((msg) => (
-          <MessageBubble
+          <div
             key={msg.id}
-            message={msg}
-            onEdit={onEditMessage}
-            onDelete={msg.role === "user" ? onDeleteMessage : undefined}
-          />
+            className={`animate-fade-in flex w-full items-start gap-3 ${
+              msg.role === "user" ? "flex-row-reverse" : ""
+            }`}
+          >
+            <MessageAvatar role={msg.role} />
+            <div className={`flex max-w-[80%] flex-col gap-1 sm:max-w-[70%] ${msg.role === "user" ? "items-end" : "items-start"}`}>
+              <MessageBubble
+                message={msg}
+                onEdit={msg.role === "user" ? onEditMessage : undefined}
+                onDelete={msg.role === "user" ? onDeleteMessage : undefined}
+              />
+              <span className="px-1 text-[11px] text-text-muted/40">
+                {new Date(msg.timestamp).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </span>
+            </div>
+          </div>
         ))}
         {streamingContent != null ? (
           <StreamingBubble content={streamingContent} />

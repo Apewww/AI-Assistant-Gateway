@@ -1,7 +1,15 @@
+export interface MessageFile {
+  file_id: string
+  name: string
+  isImage: boolean
+  blobUrl: string
+}
+
 export interface Message {
   id: string
   role: "user" | "assistant"
   content: string
+  files?: MessageFile[]
   timestamp: number
 }
 

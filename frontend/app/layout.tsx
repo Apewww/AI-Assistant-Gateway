@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AI Assistant",
-  description: "AI Assistant Gateway",
+  title: "AI Assistant Gateway",
+  description: "AI Assistant Gateway — Chat Interface",
 };
 
 export default function RootLayout({

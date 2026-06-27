@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import type { Session, Message } from "@/types";
 import { FALLBACK_MODELS } from "@/types";
-import { sendMessage, sendMessageStream } from "@/lib/api";
+import { sendMessage, sendMessageStream, uploadFile } from "@/lib/api";
 import { loadSessions, saveSessions, loadActiveId, saveActiveId } from "@/lib/persist";
 import Sidebar from "@/components/Sidebar";
 import Header from "@/components/Header";
@@ -11,7 +11,10 @@ import ChatFeed from "@/components/ChatFeed";
 import InputBar from "@/components/InputBar";
 
 const MODEL_KEY = "selected_model";
-const CONTEXT_LIMIT = 32000;
+const TEMP_KEY = "selected_temperature";
+const TEMP_STEPS = [0.2, 0.5, 0.8, 1.0] as const;
+const TEMP_LABELS = ["Low", "Medium", "High", "Maksimum"] as const;
+const CONTEXT_LIMIT = 32768;
 const ESTIMATED_CHARS_PER_TOKEN = 4;
 
 function createId(): string {
@@ -56,6 +59,28 @@ function saveModel(m: string) {
   }
 }
 
+function loadTemperature(): number {
+  if (typeof window === "undefined") return 0.7;
+  try {
+    const v = localStorage.getItem(TEMP_KEY);
+    if (v) {
+      const n = parseFloat(v);
+      if (TEMP_STEPS.includes(n as typeof TEMP_STEPS[number])) return n;
+    }
+    return 0.7;
+  } catch {
+    return 0.7;
+  }
+}
+
+function saveTemperature(t: number) {
+  try {
+    localStorage.setItem(TEMP_KEY, String(t));
+  } catch {
+    // storage unavailable
+  }
+}
+
 export default function Home() {
   const [sessions, setSessions] = useState<Session[]>([createSession()]);
   const [activeId, setActiveId] = useState<string>("");
@@ -63,7 +88,9 @@ export default function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sendingSessions, setSendingSessions] = useState<Record<string, boolean>>({});
   const [streamingContent, setStreamingContent] = useState<string | null>(null);
-  const [model, setModel] = useState(loadModel());
+  const [model, setModel] = useState(FALLBACK_MODELS[0].id);
+  const [temperature, setTemperature] = useState(0.7);
+  const [attachedFile, setAttachedFile] = useState<{ file_id: string; blobUrl: string; name: string; isImage: boolean } | null>(null);
   const activeIdRef = useRef(activeId);
   const abortRef = useRef<AbortController | null>(null);
   activeIdRef.current = activeId;
@@ -82,6 +109,8 @@ export default function Home() {
       setActiveId(sessions_[0].id);
     }
 
+    setModel(loadModel());
+    setTemperature(loadTemperature());
     setHydrated(true);
   }, []);
 
@@ -92,6 +121,12 @@ export default function Home() {
   useEffect(() => {
     if (hydrated) saveActiveId(activeId);
   }, [activeId, hydrated]);
+
+  useEffect(() => {
+    return () => {
+      if (attachedFile) URL.revokeObjectURL(attachedFile.blobUrl);
+    };
+  }, [attachedFile]);
 
   const handleNewChat = useCallback(() => {
     abortRef.current?.abort();
@@ -155,13 +190,42 @@ export default function Home() {
     saveModel(m);
   }, []);
 
+  const handleTemperatureChange = useCallback((t: number) => {
+    setTemperature(t);
+    saveTemperature(t);
+  }, []);
+
+  const handleAttachFile = useCallback(async (file: File) => {
+    try {
+      const result = await uploadFile(file);
+      const blobUrl = URL.createObjectURL(file);
+      setAttachedFile({ file_id: result.file_id, blobUrl, name: file.name, isImage: file.type.startsWith("image/") });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Upload failed";
+      alert(msg);
+    }
+  }, []);
+
+  const handleRemoveFile = useCallback(() => {
+    setAttachedFile((prev) => {
+      if (prev) URL.revokeObjectURL(prev.blobUrl);
+      return null;
+    });
+  }, []);
+
   const handleSend = useCallback(async (text: string) => {
     const userId = activeIdRef.current;
+
+    const currentFile = attachedFile;
+    setAttachedFile(null);
 
     const userMsg: Message = {
       id: createId(),
       role: "user",
       content: text,
+      files: currentFile
+        ? [{ file_id: currentFile.file_id, name: currentFile.name, isImage: currentFile.isImage, blobUrl: currentFile.blobUrl }]
+        : undefined,
       timestamp: Date.now(),
     };
 
@@ -192,6 +256,8 @@ export default function Home() {
           source_platform: "web_porto",
           message: text,
           model,
+          temperature,
+          file_ids: currentFile ? [currentFile.file_id] : undefined,
         },
         {
           onText: (chunk) => {
@@ -278,7 +344,7 @@ export default function Home() {
         abortRef.current = null;
       }
     }
-  }, [model]);
+  }, [model, temperature, attachedFile]);
 
   const tokens = sessionTokenCount(activeSession.messages);
   const tokenPct = Math.min((tokens / CONTEXT_LIMIT) * 100, 100);
@@ -297,6 +363,8 @@ export default function Home() {
         onDelete={handleDelete}
         model={model}
         onModelChange={handleModelChange}
+        temperature={temperature}
+        onTemperatureChange={handleTemperatureChange}
       />
 
       <div className="flex flex-1 flex-col min-w-0">
@@ -304,42 +372,38 @@ export default function Home() {
           name={activeSession.name}
           onToggleSidebar={() => setSidebarOpen((v) => !v)}
         />
-        <div className="flex items-center justify-center gap-3 border-b border-border/50 px-4 py-1.5">
-          <div className="flex items-center gap-2 text-[11px] text-text-muted">
-            <svg className="size-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-            </svg>
-            <span className={`${tokenWarning ? "text-danger" : ""}`}>
-              {tokens.toLocaleString()} / {CONTEXT_LIMIT.toLocaleString()}
-            </span>
-            <div className="h-1 w-20 overflow-hidden rounded-full bg-bg-surface">
-              <div
-                className={`h-full rounded-full transition-all duration-300 ${
-                  tokenWarning
-                    ? "bg-danger shadow-[0_0_6px] shadow-danger/50"
-                    : "bg-accent"
-                }`}
-                style={{ width: `${Math.max(tokenPct, 2)}%` }}
-              />
-            </div>
-            {tokenWarning && (
-              <button
-                onClick={() => {
-                  const userId = activeIdRef.current;
-                  setSessions((prev) =>
-                    prev.map((s) =>
-                      s.id === userId
-                        ? { ...s, messages: s.messages.slice(-2) }
-                        : s,
-                    ),
-                  );
-                }}
-                className="ml-0.5 cursor-pointer rounded border border-border/60 px-2 py-0.5 text-[11px] text-text-muted transition-all duration-150 hover:border-danger/30 hover:bg-danger/10 hover:text-danger"
-              >
-                Clear
-              </button>
-            )}
+        <div className="flex items-center justify-center gap-2.5 border-b border-border-soft px-6 py-1.5">
+          <svg className="size-3.5 shrink-0 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+          </svg>
+          <span className={`font-mono text-[11px] font-medium tracking-tight ${tokenWarning ? "text-danger" : "text-text-muted"}`}>
+            {tokens.toLocaleString()} / {CONTEXT_LIMIT.toLocaleString()}
+          </span>
+          <div className="h-1 w-24 overflow-hidden rounded-full bg-[rgba(255,255,255,0.06)]">
+            <div
+              className={`h-full rounded-full transition-all duration-300 ${
+                tokenWarning
+                  ? "bg-danger shadow-[0_0_6px] shadow-danger/50"
+                  : "bg-gradient-to-r from-accent/60 to-accent"
+              }`}
+              style={{ width: `${Math.max(tokenPct, 2)}%` }}
+            />
           </div>
+          <button
+            onClick={() => {
+              const userId = activeIdRef.current;
+              setSessions((prev) =>
+                prev.map((s) =>
+                  s.id === userId
+                    ? { ...s, messages: s.messages.slice(-2) }
+                    : s,
+                ),
+              );
+            }}
+            className="cursor-pointer rounded border border-border-soft px-2 py-0.5 text-[11px] font-medium text-text-muted transition-all duration-150 hover:border-danger/30 hover:bg-danger/10 hover:text-danger"
+          >
+            Clear
+          </button>
         </div>
         <ChatFeed
           messages={activeSession.messages}
@@ -348,7 +412,13 @@ export default function Home() {
           onEditMessage={handleEditMessage}
           onDeleteMessage={handleDeleteMessage}
         />
-        <InputBar onSend={handleSend} disabled={!!sendingSessions[activeId] || streamingContent != null} />
+        <InputBar
+          onSend={handleSend}
+          disabled={!!sendingSessions[activeId] || streamingContent != null}
+          attachedFile={attachedFile}
+          onAttachFile={handleAttachFile}
+          onRemoveFile={handleRemoveFile}
+        />
       </div>
     </div>
   );

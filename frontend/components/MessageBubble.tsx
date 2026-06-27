@@ -21,7 +21,7 @@ function CopyButton({ text }: { text: string }) {
   return (
     <button
       onClick={handleCopy}
-      className="absolute right-2 top-2 cursor-pointer rounded-md border border-border/60 bg-bg-surface/80 px-2 py-1 text-[11px] text-text-muted opacity-0 backdrop-blur-sm transition-all duration-200 hover:border-accent/40 hover:bg-bg-surface hover:text-accent group-hover:opacity-100"
+      className="absolute right-2 top-2 cursor-pointer rounded-md border border-border-soft bg-bg-surface/80 px-2 py-1 text-[11px] text-text-muted opacity-0 backdrop-blur-sm transition-all duration-200 hover:border-accent/30 hover:bg-bg-surface hover:text-accent group-hover:opacity-100"
     >
       {copied ? (
         <span className="flex items-center gap-1 text-accent">
@@ -47,9 +47,39 @@ function PreBlock({ children }: { children: React.ReactNode }) {
   return (
     <div className="group relative my-2">
       <CopyButton text={text} />
-      <pre className="overflow-x-auto rounded-lg bg-bg-surface p-3 text-xs leading-relaxed">
+      <pre className="overflow-x-auto rounded-lg bg-bg-primary/40 p-3 text-xs leading-relaxed border border-border-soft">
         {children}
       </pre>
+    </div>
+  );
+}
+
+function FilePreview({ files }: { files: NonNullable<Message["files"]> }) {
+  return (
+    <div className="mb-2 flex flex-col gap-1.5">
+      {files.map((f) => (
+        <div key={f.file_id} className="flex items-center gap-2 rounded-lg border border-border-soft bg-black/20 px-2.5 py-2">
+          {f.isImage ? (
+            <img
+              src={f.blobUrl}
+              alt={f.name}
+              className="size-10 shrink-0 rounded-md object-cover"
+              onError={(e) => {
+                const img = e.target as HTMLImageElement;
+                img.style.display = "none";
+                const icon = img.nextElementSibling;
+                if (icon) icon.classList.remove("hidden");
+              }}
+            />
+          ) : null}
+          <div className={`flex size-10 shrink-0 items-center justify-center rounded-lg bg-bg-hover text-text-muted ${f.isImage ? "hidden" : ""}`}>
+            <svg className="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+            </svg>
+          </div>
+          <span className="min-w-0 flex-1 truncate text-xs text-text-secondary">{f.name}</span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -88,167 +118,156 @@ export default function MessageBubble({
   };
 
   return (
-    <div
-      className={`animate-fade-in group flex w-full ${isUser ? "justify-end" : "justify-start"}`}
-    >
+    <div className="group relative">
       <div
-        className={`flex max-w-[80%] flex-col gap-1 sm:max-w-[70%] ${
-          isUser ? "items-end" : "items-start"
+        className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+          isUser
+            ? "bg-bg-user-msg text-text-primary rounded-br-md"
+            : "bg-bg-surface text-text-primary rounded-bl-md border border-border-soft"
         }`}
       >
-        <div
-          className={`relative rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
-            isUser
-              ? "bg-accent text-white rounded-br-md"
-              : "bg-bg-ai-msg text-text-primary rounded-bl-md border border-border"
-          }`}
-        >
-          {isUser && !editing && (
-            <div className="absolute -left-9 top-2 flex flex-col gap-0.5 opacity-0 transition-all duration-200 group-hover:opacity-100 max-lg:-right-2 max-lg:left-auto max-lg:top-0 max-lg:flex-row max-lg:opacity-100">
-              <button
-                onClick={() => {
-                  setEditText(message.content);
-                  setEditing(true);
-                }}
-                className="flex size-7 cursor-pointer items-center justify-center rounded-lg text-text-muted transition-all duration-150 hover:bg-white/10 hover:text-text-primary"
-                aria-label="Edit message"
-              >
-                <svg className="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
-                </svg>
-              </button>
-              <button
-                onClick={() => onDelete?.(message.id)}
-                className="flex size-7 cursor-pointer items-center justify-center rounded-lg text-text-muted transition-all duration-150 hover:bg-danger/10 hover:text-danger"
-                aria-label="Delete message"
-              >
-                <svg className="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-          )}
+        {isUser && !editing && (
+          <div className="absolute -left-10 top-1 flex flex-col gap-0.5 opacity-0 transition-all duration-200 group-hover:opacity-100 max-lg:-right-2 max-lg:left-auto max-lg:top-0 max-lg:flex-row max-lg:opacity-100">
+            <button
+              onClick={() => {
+                setEditText(message.content);
+                setEditing(true);
+              }}
+              className="flex size-7 cursor-pointer items-center justify-center rounded-lg text-text-muted transition-all duration-150 hover:bg-bg-hover hover:text-text-primary"
+              aria-label="Edit message"
+            >
+              <svg className="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+              </svg>
+            </button>
+            <button
+              onClick={() => onDelete?.(message.id)}
+              className="flex size-7 cursor-pointer items-center justify-center rounded-lg text-text-muted transition-all duration-150 hover:bg-danger/10 hover:text-danger"
+              aria-label="Delete message"
+            >
+              <svg className="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        )}
 
-          {isUser ? (
-            editing ? (
-              <div className="flex flex-col gap-2">
-                <textarea
-                  autoFocus
-                  value={editText}
-                  onChange={(e) => setEditText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSaveEdit();
-                    }
-                    if (e.key === "Escape") setEditing(false);
-                  }}
-                  className="w-full resize-none rounded-lg bg-black/30 p-2 text-sm text-white outline-none ring-1 ring-border-focus"
-                  rows={3}
-                />
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleSaveEdit}
-                    className="rounded-md bg-accent px-3 py-1 text-xs font-medium text-white hover:bg-accent-hover"
-                  >
-                    Save
-                  </button>
-                  <button
-                    onClick={() => setEditing(false)}
-                    className="rounded-md border border-border px-3 py-1 text-xs font-medium text-text-secondary hover:bg-bg-hover"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <p className="whitespace-pre-wrap">{message.content}</p>
-            )
-          ) : (
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              components={{
-                p({ children }) {
-                  return <p className="mb-2 last:mb-0">{children}</p>;
-                },
-                pre({ children }) {
-                  return <PreBlock>{children}</PreBlock>;
-                },
-                code({ className, children, ...props }) {
-                  if (className) {
-                    return (
-                      <code className={className} {...props}>
-                        {children}
-                      </code>
-                    );
+        {isUser ? (
+          editing ? (
+            <div className="flex flex-col gap-2">
+              <textarea
+                autoFocus
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSaveEdit();
                   }
+                  if (e.key === "Escape") setEditing(false);
+                }}
+                className="w-full resize-none rounded-lg bg-black/40 p-2 text-sm text-text-primary outline-none ring-1 ring-accent/50"
+                rows={3}
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={handleSaveEdit}
+                  className="rounded-md bg-accent px-3 py-1 text-xs font-medium text-white hover:bg-accent-hover transition-colors"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={() => setEditing(false)}
+                  className="rounded-md border border-border-soft px-3 py-1 text-xs font-medium text-text-secondary hover:bg-bg-hover transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {message.files && message.files.length > 0 && <FilePreview files={message.files} />}
+              <p className="whitespace-pre-wrap">{message.content}</p>
+            </>
+          )
+        ) : (
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={{
+              p({ children }) {
+                return <p className="mb-2 last:mb-0">{children}</p>;
+              },
+              pre({ children }) {
+                return <PreBlock>{children}</PreBlock>;
+              },
+              code({ className, children, ...props }) {
+                if (className) {
                   return (
-                    <code
-                      className="rounded bg-bg-surface px-1.5 py-0.5 text-xs text-accent"
-                      {...props}
-                    >
+                    <code className={className} {...props}>
                       {children}
                     </code>
                   );
-                },
-                a({ href, children }) {
-                  return (
-                    <a
-                      href={href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-accent underline underline-offset-2 hover:text-accent-hover"
-                    >
+                }
+                return (
+                  <code
+                    className="rounded bg-bg-primary/40 px-1.5 py-0.5 text-xs text-accent"
+                    {...props}
+                  >
+                    {children}
+                  </code>
+                );
+              },
+              a({ href, children }) {
+                return (
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-accent underline underline-offset-2 hover:text-accent-hover"
+                  >
+                    {children}
+                  </a>
+                );
+              },
+              ul({ children }) {
+                return <ul className="my-1 list-disc pl-5">{children}</ul>;
+              },
+              ol({ children }) {
+                return <ol className="my-1 list-decimal pl-5">{children}</ol>;
+              },
+              blockquote({ children }) {
+                return (
+                  <blockquote className="my-2 border-l-2 border-border-soft pl-4 italic text-text-secondary">
+                    {children}
+                  </blockquote>
+                );
+              },
+              table({ children }) {
+                return (
+                  <div className="my-2 overflow-x-auto">
+                    <table className="w-full border-collapse border border-border-soft text-left text-sm">
                       {children}
-                    </a>
-                  );
-                },
-                ul({ children }) {
-                  return <ul className="my-1 list-disc pl-5">{children}</ul>;
-                },
-                ol({ children }) {
-                  return <ol className="my-1 list-decimal pl-5">{children}</ol>;
-                },
-                blockquote({ children }) {
-                  return (
-                    <blockquote className="my-2 border-l-2 border-border pl-4 italic text-text-secondary">
-                      {children}
-                    </blockquote>
-                  );
-                },
-                table({ children }) {
-                  return (
-                    <div className="my-2 overflow-x-auto">
-                      <table className="w-full border-collapse border border-border text-left text-sm">
-                        {children}
-                      </table>
-                    </div>
-                  );
-                },
-                th({ children }) {
-                  return (
-                    <th className="border border-border bg-bg-surface px-3 py-2 font-semibold">
-                      {children}
-                    </th>
-                  );
-                },
-                td({ children }) {
-                  return (
-                    <td className="border border-border px-3 py-2">{children}</td>
-                  );
-                },
-              }}
-            >
-              {processedContent}
-            </ReactMarkdown>
-          )}
-        </div>
-        <span className="px-1 text-[11px] text-text-secondary">
-          {new Date(message.timestamp).toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
-        </span>
+                    </table>
+                  </div>
+                );
+              },
+              th({ children }) {
+                return (
+                  <th className="border border-border-soft bg-bg-surface px-3 py-2 font-semibold">
+                    {children}
+                  </th>
+                );
+              },
+              td({ children }) {
+                return (
+                  <td className="border border-border-soft px-3 py-2">{children}</td>
+                );
+              },
+            }}
+          >
+            {processedContent}
+          </ReactMarkdown>
+        )}
       </div>
     </div>
   );

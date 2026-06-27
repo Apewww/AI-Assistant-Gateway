@@ -1,4 +1,6 @@
 function getApiBase(): string {
+  const envUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (envUrl) return envUrl;
   if (typeof window !== "undefined") {
     const hostname = window.location.hostname;
     if (hostname === "localhost" || hostname === "127.0.0.1") {
@@ -6,7 +8,14 @@ function getApiBase(): string {
     }
     return `http://${hostname}:8000`;
   }
-  return process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+  return "http://127.0.0.1:8000";
+}
+
+export interface UploadResult {
+  file_id: string;
+  filename: string;
+  mime_type: string;
+  size: number;
 }
 
 export interface ApiChatRequest {
@@ -14,6 +23,8 @@ export interface ApiChatRequest {
   source_platform: string;
   message: string;
   model?: string;
+  temperature?: number;
+  file_ids?: string[];
 }
 
 export interface ActionTrigger {
@@ -32,6 +43,25 @@ export interface ApiChatResponse {
 export interface ModelsResponse {
   models: Array<{ id: string; name: string; pricing: Record<string, string> }>;
   total: number;
+}
+
+export async function uploadFile(
+  file: File,
+  signal?: AbortSignal,
+): Promise<UploadResult> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`${getApiBase()}/api/v1/upload`, {
+    method: "POST",
+    body: form,
+    signal,
+  });
+  if (res.status === 413) throw new Error("File too large. Max 5MB.");
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({ detail: "Upload failed" }));
+    throw new Error(detail.detail || `HTTP ${res.status}`);
+  }
+  return res.json();
 }
 
 export async function fetchModels(): Promise<ModelsResponse> {

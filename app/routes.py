@@ -1,8 +1,12 @@
+import base64
 import json
 import logging
+import os
+import tempfile
 import time
+import uuid
 import urllib.request
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, UploadFile, File
 from fastapi.responses import StreamingResponse
 from openai import OpenAI, APIError
 
@@ -15,13 +19,83 @@ from app.config import (
     AI_MODE,
     ERROR_PATTERNS,
 )
-from app.models import ChatRequest, ChatResponse, ActionTrigger
+from app.models import ChatRequest, ChatResponse, ActionTrigger, UploadResponse
 from app.session import session_store
 from app.rate_limiter import check_rate_limit
 from app.system_prompts import get_system_instruction
 from app.tools.weather import get_current_weather
 from app.tools.audio import control_audio_player, action_triggered_var
 from app.tools.portfolio import get_portfolio_info
+
+TEXT_EXTENSIONS = {
+    ".py": "python", ".js": "javascript", ".ts": "typescript", ".tsx": "tsx",
+    ".jsx": "jsx", ".json": "json", ".md": "markdown", ".css": "css",
+    ".html": "html", ".xml": "xml", ".yaml": "yaml", ".yml": "yaml",
+    ".sh": "bash", ".bash": "bash", ".env": "env", ".gitignore": "gitignore",
+    ".sql": "sql", ".rb": "ruby", ".php": "php", ".go": "go", ".rs": "rust",
+    ".java": "java", ".c": "c", ".cpp": "cpp", ".h": "c", ".hpp": "cpp",
+    ".swift": "swift", ".kt": "kotlin", ".dart": "dart", ".vue": "vue",
+    ".svelte": "svelte", ".astro": "astro", ".txt": "text", ".csv": "csv",
+    ".toml": "toml", ".ini": "ini", ".cfg": "ini", ".bat": "bat",
+    ".ps1": "powershell", ".lock": "json", ".svg": "svg",
+}
+
+TEXT_MIME_PREFIXES = ("text/", "application/json", "application/xml", "application/yaml", "application/javascript")
+
+MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
+_UPLOAD_DIR = os.path.join(tempfile.gettempdir(), "ai-gateway-uploads")
+os.makedirs(_UPLOAD_DIR, exist_ok=True)
+
+
+def _file_path(file_id: str) -> str:
+    return os.path.join(_UPLOAD_DIR, file_id)
+
+
+def _build_file_content(file_id: str, mime_type: str = "") -> dict | str | None:
+    path = _file_path(file_id)
+    if not os.path.isfile(path):
+        logging.warning(f"Uploaded file not found: {file_id}")
+        return None
+    ext = (".bin" if "." not in file_id else "." + file_id.rsplit(".", 1)[-1]).lower()
+    is_image = mime_type.startswith("image/") or ext in (".png", ".jpg", ".jpeg", ".gif", ".webp")
+    is_text = (
+        mime_type.startswith(TEXT_MIME_PREFIXES)
+        or ext in TEXT_EXTENSIONS
+        or mime_type.startswith("text/")
+    )
+
+    try:
+        if is_image:
+            with open(path, "rb") as f:
+                raw = f.read()
+            mime = mime_type or "image/png"
+            b64 = base64.b64encode(raw).decode("ascii")
+            return {
+                "type": "image_url",
+                "image_url": {"url": f"data:{mime};base64,{b64}"},
+            }
+        elif is_text:
+            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                text = f.read()
+            lang = TEXT_EXTENSIONS.get(ext, "")
+            code_block = f"{text}"
+            if lang:
+                code_block = f"```{lang}\n{text}\n```"
+            return {
+                "type": "text",
+                "text": code_block,
+            }
+        else:
+            logging.warning(f"Unsupported file type: {mime_type} (ext={ext})")
+            return {
+                "type": "text",
+                "text": f"[File: {file_id} — type not supported by AI]",
+            }
+    finally:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
 
 router = APIRouter()
 
@@ -98,7 +172,7 @@ async def list_models():
 
     try:
         req = urllib.request.Request(
-            f"{OPENROUTER_BASE_URL}/models",
+            f"{OPENROUTER_BASE_URL}/models?q=free",
             headers={"Content-Type": "application/json"},
         )
         with urllib.request.urlopen(req, timeout=10) as resp:
@@ -136,6 +210,21 @@ async def list_models():
         return fallback
 
 
+@router.post("/api/v1/upload", response_model=UploadResponse)
+async def upload_file(file: UploadFile = File(...)):
+    raw = await file.read()
+    if len(raw) > MAX_UPLOAD_SIZE:
+        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=f"File too large. Max {MAX_UPLOAD_SIZE // (1024*1024)}MB.")
+
+    ext = (file.filename or "file").rsplit(".", 1)[-1] if "." in (file.filename or "") else "bin"
+    file_id = f"{uuid.uuid4().hex}.{ext}"
+    dest = _file_path(file_id)
+    with open(dest, "wb") as f:
+        f.write(raw)
+
+    return UploadResponse(file_id=file_id, filename=file.filename or "file", mime_type=file.content_type or "application/octet-stream", size=len(raw))
+
+
 @router.post("/api/v1/chat/message", response_model=ChatResponse)
 async def chat_message(request: ChatRequest):
     check_rate_limit(request.session_id)
@@ -162,10 +251,19 @@ async def chat_message(request: ChatRequest):
             role = "assistant" if msg["role"] == "model" else msg["role"]
             messages.append({"role": role, "content": msg["message"]})
 
-        messages.append({"role": "user", "content": request.message})
+        if request.file_ids:
+            user_content: list = [{"type": "text", "text": request.message}]
+            for fid in request.file_ids:
+                part = _build_file_content(fid)
+                if part:
+                    user_content.append(part)
+            messages.append({"role": "user", "content": user_content})
+        else:
+            messages.append({"role": "user", "content": request.message})
 
         response_text = ""
         active_model = request.model or MODEL
+        active_temp = request.temperature if request.temperature is not None else TEMPERATURE
 
         for _ in range(MAX_TOOL_CALLS):
             response = client.chat.completions.create(
@@ -173,7 +271,7 @@ async def chat_message(request: ChatRequest):
                 messages=messages,
                 tools=TOOLS,
                 tool_choice="auto",
-                temperature=TEMPERATURE,
+                temperature=active_temp,
             )
 
             if not response.choices or response.choices[0] is None:
@@ -327,6 +425,7 @@ async def chat_stream(request: ChatRequest):
     def generate():
         nonlocal history
         active_model = request.model or MODEL
+        active_temp = request.temperature if request.temperature is not None else TEMPERATURE
         full_response = ""
         action = None
 
@@ -337,7 +436,16 @@ async def chat_stream(request: ChatRequest):
             for msg in history:
                 role = "assistant" if msg["role"] == "model" else msg["role"]
                 messages.append({"role": role, "content": msg["message"]})
-            messages.append({"role": "user", "content": request.message})
+
+            if request.file_ids:
+                user_content: list = [{"type": "text", "text": request.message}]
+                for fid in request.file_ids:
+                    part = _build_file_content(fid)
+                    if part:
+                        user_content.append(part)
+                messages.append({"role": "user", "content": user_content})
+            else:
+                messages.append({"role": "user", "content": request.message})
 
             for _ in range(MAX_TOOL_CALLS):
                 stream = client.chat.completions.create(
@@ -345,7 +453,7 @@ async def chat_stream(request: ChatRequest):
                     messages=messages,
                     tools=TOOLS,
                     tool_choice="auto",
-                    temperature=TEMPERATURE,
+                    temperature=active_temp,
                     stream=True,
                 )
 
