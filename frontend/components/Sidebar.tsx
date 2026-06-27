@@ -63,7 +63,7 @@ export default function Sidebar({
               onNewChat();
               onClose();
             }}
-            className="flex w-full items-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-text-primary transition-all hover:bg-bg-hover active:scale-[0.98]"
+            className="flex w-full cursor-pointer items-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-text-primary transition-all duration-150 hover:bg-bg-hover hover:border-accent/30 active:scale-[0.98]"
           >
             <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -116,7 +116,7 @@ export default function Sidebar({
                         e.stopPropagation();
                         handleStartRename(s);
                       }}
-                      className="flex size-7 items-center justify-center rounded-md text-text-muted hover:bg-bg-hover hover:text-text-primary transition-colors"
+                      className="flex size-7 cursor-pointer items-center justify-center rounded-md text-text-muted transition-colors duration-150 hover:bg-bg-hover hover:text-text-primary"
                       aria-label="Rename"
                     >
                       <svg className="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -128,7 +128,7 @@ export default function Sidebar({
                         e.stopPropagation();
                         onDelete(s.id);
                       }}
-                      className="flex size-7 items-center justify-center rounded-md text-text-muted hover:bg-bg-hover hover:text-danger transition-colors"
+                      className="flex size-7 cursor-pointer items-center justify-center rounded-md text-text-muted transition-colors duration-150 hover:bg-bg-hover hover:text-danger"
                       aria-label="Delete"
                     >
                       <svg className="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>

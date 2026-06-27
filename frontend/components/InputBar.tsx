@@ -39,7 +39,7 @@ export default function InputBar({
 
   return (
     <div className="border-t border-border bg-bg-primary px-4 py-3">
-      <div className="mx-auto flex max-w-3xl items-end gap-2 rounded-2xl border border-border bg-bg-surface px-4 py-2 transition-colors focus-within:border-border-focus">
+      <div className="mx-auto flex max-w-3xl items-end gap-2 rounded-2xl border border-border bg-bg-surface px-4 py-2 shadow-sm transition-all duration-200 focus-within:border-accent/50 focus-within:shadow-[0_0_12px] focus-within:shadow-accent/5">
         <textarea
           ref={textareaRef}
           value={text}
@@ -48,12 +48,12 @@ export default function InputBar({
           placeholder="Type a message..."
           rows={1}
           disabled={disabled}
-          className="max-h-40 flex-1 resize-none bg-transparent text-sm text-text-primary placeholder-text-muted outline-none"
+          className="max-h-40 flex-1 resize-none bg-transparent text-sm text-text-primary placeholder-text-muted outline-none disabled:cursor-not-allowed disabled:opacity-50"
         />
         <button
           onClick={handleSend}
           disabled={!text.trim() || disabled}
-          className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-accent text-white transition-all hover:bg-accent-hover active:scale-95 disabled:opacity-40 disabled:active:scale-100"
+          className="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-accent text-white transition-all duration-150 hover:bg-accent-hover hover:shadow-[0_0_10px] hover:shadow-accent/40 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none disabled:active:scale-100"
           aria-label="Send message"
         >
           <svg

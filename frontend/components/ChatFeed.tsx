@@ -25,7 +25,14 @@ function StreamingBubble({ content }: { content: string }) {
     <div className="animate-fade-in flex w-full justify-start">
       <div className="flex max-w-[80%] flex-col gap-1 sm:max-w-[70%] items-start">
         <div className="rounded-2xl rounded-bl-md border border-border bg-bg-ai-msg px-4 py-2.5 text-sm leading-relaxed text-text-primary">
-          {content || <TypingIndicator />}
+          {content ? (
+            <span>
+              {content}
+              <span className="inline-block h-[1em] w-[2px] animate-pulse bg-accent align-text-bottom ml-0.5" />
+            </span>
+          ) : (
+            <TypingIndicator />
+          )}
         </div>
       </div>
     </div>

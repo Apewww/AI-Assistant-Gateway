@@ -11,7 +11,7 @@ export default function Header({
     <header className="flex items-center gap-3 border-b border-border bg-bg-primary px-4 py-3">
       <button
         onClick={onToggleSidebar}
-        className="flex size-9 items-center justify-center rounded-lg text-text-secondary transition-colors hover:bg-bg-hover hover:text-text-primary lg:hidden"
+        className="flex size-9 cursor-pointer items-center justify-center rounded-lg text-text-secondary transition-colors duration-150 hover:bg-bg-hover hover:text-text-primary lg:hidden"
         aria-label="Toggle sidebar"
       >
         <svg className="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>

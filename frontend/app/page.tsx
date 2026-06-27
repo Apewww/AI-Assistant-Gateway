@@ -304,19 +304,24 @@ export default function Home() {
           name={activeSession.name}
           onToggleSidebar={() => setSidebarOpen((v) => !v)}
         />
-        <div className="flex items-center justify-center gap-3 px-4 py-1.5">
+        <div className="flex items-center justify-center gap-3 border-b border-border/50 px-4 py-1.5">
           <div className="flex items-center gap-2 text-[11px] text-text-muted">
-            <div className="h-1 w-24 overflow-hidden rounded-full bg-bg-surface">
+            <svg className="size-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+            </svg>
+            <span className={`${tokenWarning ? "text-danger" : ""}`}>
+              {tokens.toLocaleString()} / {CONTEXT_LIMIT.toLocaleString()}
+            </span>
+            <div className="h-1 w-20 overflow-hidden rounded-full bg-bg-surface">
               <div
-                className={`h-full rounded-full transition-all ${
-                  tokenWarning ? "bg-danger" : "bg-accent"
+                className={`h-full rounded-full transition-all duration-300 ${
+                  tokenWarning
+                    ? "bg-danger shadow-[0_0_6px] shadow-danger/50"
+                    : "bg-accent"
                 }`}
-                style={{ width: `${tokenPct}%` }}
+                style={{ width: `${Math.max(tokenPct, 2)}%` }}
               />
             </div>
-            <span className={tokenWarning ? "text-danger" : ""}>
-              {tokens.toLocaleString()} / {CONTEXT_LIMIT.toLocaleString()} tokens
-            </span>
             {tokenWarning && (
               <button
                 onClick={() => {
@@ -329,9 +334,9 @@ export default function Home() {
                     ),
                   );
                 }}
-                className="ml-1 rounded border border-border px-2 py-0.5 text-[11px] text-text-muted hover:bg-bg-hover hover:text-text-primary"
+                className="ml-0.5 cursor-pointer rounded border border-border/60 px-2 py-0.5 text-[11px] text-text-muted transition-all duration-150 hover:border-danger/30 hover:bg-danger/10 hover:text-danger"
               >
-                Clear context
+                Clear
               </button>
             )}
           </div>
