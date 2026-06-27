@@ -1,11 +1,17 @@
 import json
 import logging
-import os
-import re
 from fastapi import APIRouter, HTTPException, status
 from openai import OpenAI, APIError
 
-from app.config import OPENROUTER_API_KEY
+from app.config import (
+    OPENROUTER_API_KEY,
+    OPENROUTER_BASE_URL,
+    MODEL,
+    TEMPERATURE,
+    MAX_TOOL_CALLS,
+    AI_MODE,
+    ERROR_PATTERNS,
+)
 from app.models import ChatRequest, ChatResponse, ActionTrigger
 from app.session import session_store
 from app.rate_limiter import check_rate_limit
@@ -13,13 +19,6 @@ from app.system_prompts import get_system_instruction
 from app.tools.weather import get_current_weather
 from app.tools.audio import control_audio_player, action_triggered_var
 from app.tools.portfolio import get_portfolio_info
-
-ERROR_PATTERNS = [
-    "does not support image",
-    "cannot read",
-    "image input",
-    "does not support",
-]
 
 router = APIRouter()
 
@@ -99,11 +98,11 @@ async def chat_message(request: ChatRequest):
 
     try:
         client = OpenAI(
-            base_url="https://openrouter.ai/api/v1",
+            base_url=OPENROUTER_BASE_URL,
             api_key=api_key,
         )
 
-        messages = [{"role": "system", "content": get_system_instruction(request.source_platform)}]
+        messages = [{"role": "system", "content": get_system_instruction(request.source_platform, AI_MODE)}]
         for msg in history:
             role = "assistant" if msg["role"] == "model" else msg["role"]
             messages.append({"role": role, "content": msg["message"]})
@@ -112,13 +111,13 @@ async def chat_message(request: ChatRequest):
 
         response_text = ""
 
-        for _ in range(5):
+        for _ in range(MAX_TOOL_CALLS):
             response = client.chat.completions.create(
-                model="'openai/gpt-oss-120b:free",
+                model=MODEL,
                 messages=messages,
                 tools=TOOLS,
                 tool_choice="auto",
-                temperature=0.7,
+                temperature=TEMPERATURE,
             )
 
             if not response.choices or response.choices[0] is None:
@@ -129,7 +128,7 @@ async def chat_message(request: ChatRequest):
             message = response.choices[0].message
 
             content = (message.content or "").strip()
-            is_model_error = any(re.search(p, content, re.IGNORECASE) for p in ERROR_PATTERNS)
+            is_model_error = any(p.search(content) for p in ERROR_PATTERNS)
             if is_model_error:
                 response_text = ""
                 break
@@ -176,7 +175,7 @@ async def chat_message(request: ChatRequest):
             last_content = None
             if response.choices and response.choices[0] is not None:
                 content = (response.choices[0].message.content or "").strip()
-                is_model_error = any(re.search(p, content, re.IGNORECASE) for p in ERROR_PATTERNS)
+                is_model_error = any(p.search(content) for p in ERROR_PATTERNS)
                 last_content = "" if is_model_error else content
             response_text = last_content or ""
 
