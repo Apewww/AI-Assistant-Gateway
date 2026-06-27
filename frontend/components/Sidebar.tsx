@@ -2,10 +2,6 @@
 
 import { useState } from "react";
 import type { Session } from "@/types";
-import ModelSelector from "./ModelSelector";
-
-const TEMP_STEPS = [0.2, 0.5, 0.8, 1.0] as const;
-const TEMP_LABELS = ["Low", "Medium", "High", "Maksimum"] as const;
 
 export default function Sidebar({
   sessions,
@@ -16,10 +12,6 @@ export default function Sidebar({
   onNewChat,
   onRename,
   onDelete,
-  model,
-  onModelChange,
-  temperature,
-  onTemperatureChange,
 }: {
   sessions: Session[];
   activeId: string;
@@ -29,15 +21,9 @@ export default function Sidebar({
   onNewChat: () => void;
   onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
-  model: string;
-  onModelChange: (model: string) => void;
-  temperature: number;
-  onTemperatureChange: (temp: number) => void;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
-  const [tempOpen, setTempOpen] = useState(true);
-  const tempIndex = TEMP_STEPS.indexOf(temperature as typeof TEMP_STEPS[number]);
 
   const handleStartRename = (s: Session) => {
     setEditingId(s.id);
@@ -80,54 +66,6 @@ export default function Sidebar({
             </svg>
             New Chat
           </button>
-        </div>
-
-        {/* Model Selector */}
-        <div className="px-4 py-3 border-b border-border-soft">
-          <ModelSelector value={model} onChange={onModelChange} />
-        </div>
-
-        {/* Temperature Settings */}
-        <div className="px-4 py-3 border-b border-border-soft">
-          <button
-            onClick={() => setTempOpen(!tempOpen)}
-            className="flex w-full cursor-pointer items-center justify-between"
-          >
-            <div className="flex items-center gap-2 text-xs text-text-muted">
-              <svg className="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75" />
-              </svg>
-              Temperature
-            </div>
-            <span className="font-mono text-xs font-semibold text-accent">{temperature.toFixed(1)}</span>
-          </button>
-          {tempOpen && (
-            <div className="mt-3 rounded-lg border border-border-soft bg-bg-primary/60 p-3">
-              <div className="flex items-center justify-between mb-3">
-                {TEMP_LABELS.map((label, i) => (
-                  <button
-                    key={label}
-                    onClick={() => onTemperatureChange(TEMP_STEPS[i])}
-                    className={`cursor-pointer rounded-md px-2.5 py-1 text-[11px] font-medium transition-all duration-150 ${
-                      tempIndex === i
-                        ? "bg-accent/15 text-accent"
-                        : "text-text-muted hover:text-text-secondary"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <div className="relative h-1 w-full rounded-full bg-[rgba(255,255,255,0.08)]">
-                <div
-                  className="absolute left-0 top-0 h-full rounded-full bg-gradient-to-r from-accent/40 to-accent transition-all duration-200"
-                  style={{ width: `${((tempIndex + 1) / TEMP_STEPS.length) * 100}%` }}
-                >
-                  <div className="absolute right-0 top-1/2 size-3 -translate-y-1/2 translate-x-1/2 rounded-full border-2 border-bg-sidebar bg-accent shadow-[0_0_8px_rgba(16,185,129,0.3)]" />
-                </div>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Chat Sessions */}

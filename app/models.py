@@ -9,6 +9,7 @@ class ChatRequest(BaseModel):
     model: Optional[str] = Field(default=None, description="Model override (falls back to env MODEL)")
     temperature: Optional[float] = Field(default=None, ge=0.0, le=1.0, description="Temperature override (falls back to env TEMPERATURE)")
     file_ids: Optional[List[str]] = Field(default=None, description="IDs of pre-uploaded files to include with the message")
+    reasoning_effort: Optional[str] = Field(default=None, description="Reasoning effort: low, medium, high, or max")
 
 
 class UploadResponse(BaseModel):

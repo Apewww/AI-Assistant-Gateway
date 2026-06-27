@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import type { Session, Message } from "@/types";
-import { FALLBACK_MODELS } from "@/types";
-import { sendMessage, sendMessageStream, uploadFile } from "@/lib/api";
+import type { Session, Message, ReasoningEffort, ModelOption } from "@/types";
+import { FALLBACK_MODELS, REASONING_OPTIONS } from "@/types";
+import { sendMessage, sendMessageStream, uploadFile, fetchModels } from "@/lib/api";
 import { loadSessions, saveSessions, loadActiveId, saveActiveId } from "@/lib/persist";
 import Sidebar from "@/components/Sidebar";
 import Header from "@/components/Header";
@@ -12,6 +12,7 @@ import InputBar from "@/components/InputBar";
 
 const MODEL_KEY = "selected_model";
 const TEMP_KEY = "selected_temperature";
+const REASONING_KEY = "selected_reasoning";
 const TEMP_STEPS = [0.2, 0.5, 0.8, 1.0] as const;
 const TEMP_LABELS = ["Low", "Medium", "High", "Maksimum"] as const;
 const CONTEXT_LIMIT = 32768;
@@ -81,6 +82,25 @@ function saveTemperature(t: number) {
   }
 }
 
+function loadReasoning(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    const v = localStorage.getItem(REASONING_KEY);
+    if (v && REASONING_OPTIONS.includes(v as ReasoningEffort)) return v;
+    return "";
+  } catch {
+    return "";
+  }
+}
+
+function saveReasoning(r: string) {
+  try {
+    localStorage.setItem(REASONING_KEY, r);
+  } catch {
+    // storage unavailable
+  }
+}
+
 export default function Home() {
   const [sessions, setSessions] = useState<Session[]>([createSession()]);
   const [activeId, setActiveId] = useState<string>("");
@@ -90,6 +110,8 @@ export default function Home() {
   const [streamingContent, setStreamingContent] = useState<string | null>(null);
   const [model, setModel] = useState(FALLBACK_MODELS[0].id);
   const [temperature, setTemperature] = useState(0.7);
+  const [reasoningEffort, setReasoningEffort] = useState("");
+  const [models, setModels] = useState<ModelOption[]>(FALLBACK_MODELS);
   const [attachedFile, setAttachedFile] = useState<{ file_id: string; blobUrl: string; name: string; isImage: boolean } | null>(null);
   const activeIdRef = useRef(activeId);
   const abortRef = useRef<AbortController | null>(null);
@@ -111,7 +133,16 @@ export default function Home() {
 
     setModel(loadModel());
     setTemperature(loadTemperature());
+    setReasoningEffort(loadReasoning());
     setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    fetchModels()
+      .then((res) => {
+        if (Array.isArray(res.models)) setModels(res.models);
+      })
+      .catch(() => { /* keep FALLBACK_MODELS */ });
   }, []);
 
   useEffect(() => {
@@ -195,6 +226,11 @@ export default function Home() {
     saveTemperature(t);
   }, []);
 
+  const handleReasoningChange = useCallback((r: string) => {
+    setReasoningEffort(r);
+    saveReasoning(r);
+  }, []);
+
   const handleAttachFile = useCallback(async (file: File) => {
     try {
       const result = await uploadFile(file);
@@ -257,6 +293,7 @@ export default function Home() {
           message: text,
           model,
           temperature,
+          reasoning_effort: reasoningEffort || undefined,
           file_ids: currentFile ? [currentFile.file_id] : undefined,
         },
         {
@@ -344,7 +381,7 @@ export default function Home() {
         abortRef.current = null;
       }
     }
-  }, [model, temperature, attachedFile]);
+  }, [model, temperature, reasoningEffort, attachedFile]);
 
   const tokens = sessionTokenCount(activeSession.messages);
   const tokenPct = Math.min((tokens / CONTEXT_LIMIT) * 100, 100);
@@ -361,10 +398,6 @@ export default function Home() {
         onNewChat={handleNewChat}
         onRename={handleRename}
         onDelete={handleDelete}
-        model={model}
-        onModelChange={handleModelChange}
-        temperature={temperature}
-        onTemperatureChange={handleTemperatureChange}
       />
 
       <div className="flex flex-1 flex-col min-w-0">
@@ -418,6 +451,13 @@ export default function Home() {
           attachedFile={attachedFile}
           onAttachFile={handleAttachFile}
           onRemoveFile={handleRemoveFile}
+          model={model}
+          models={models}
+          onModelChange={handleModelChange}
+          temperature={temperature}
+          onTemperatureChange={handleTemperatureChange}
+          reasoningEffort={reasoningEffort}
+          onReasoningChange={handleReasoningChange}
         />
       </div>
     </div>

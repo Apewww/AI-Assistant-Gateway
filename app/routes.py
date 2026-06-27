@@ -264,6 +264,9 @@ async def chat_message(request: ChatRequest):
         response_text = ""
         active_model = request.model or MODEL
         active_temp = request.temperature if request.temperature is not None else TEMPERATURE
+        reasoning_kwargs = {}
+        if request.reasoning_effort:
+            reasoning_kwargs["reasoning_effort"] = request.reasoning_effort
 
         for _ in range(MAX_TOOL_CALLS):
             response = client.chat.completions.create(
@@ -272,6 +275,7 @@ async def chat_message(request: ChatRequest):
                 tools=TOOLS,
                 tool_choice="auto",
                 temperature=active_temp,
+                **reasoning_kwargs,
             )
 
             if not response.choices or response.choices[0] is None:
@@ -284,7 +288,7 @@ async def chat_message(request: ChatRequest):
             content = (message.content or "").strip()
             is_model_error = any(p.search(content) for p in ERROR_PATTERNS)
             if is_model_error:
-                response_text = ""
+                response_text = "Maaf, asisten AI saat ini tidak mendukung pemrosesan gambar. Silakan kirim pertanyaan berupa teks."
                 break
 
             if message.tool_calls:
@@ -330,7 +334,7 @@ async def chat_message(request: ChatRequest):
             if response.choices and response.choices[0] is not None:
                 content = (response.choices[0].message.content or "").strip()
                 is_model_error = any(p.search(content) for p in ERROR_PATTERNS)
-                last_content = "" if is_model_error else content
+                last_content = "Maaf, asisten AI saat ini tidak mendukung pemrosesan gambar. Silakan kirim pertanyaan berupa teks." if is_model_error else content
             response_text = last_content or ""
 
         if not response_text:
@@ -426,6 +430,9 @@ async def chat_stream(request: ChatRequest):
         nonlocal history
         active_model = request.model or MODEL
         active_temp = request.temperature if request.temperature is not None else TEMPERATURE
+        reasoning_kwargs = {}
+        if request.reasoning_effort:
+            reasoning_kwargs["reasoning_effort"] = request.reasoning_effort
         full_response = ""
         action = None
 
@@ -455,6 +462,7 @@ async def chat_stream(request: ChatRequest):
                     tool_choice="auto",
                     temperature=active_temp,
                     stream=True,
+                    **reasoning_kwargs,
                 )
 
                 content_chunks = []
@@ -490,7 +498,7 @@ async def chat_stream(request: ChatRequest):
                 acc_text = "".join(content_chunks)
                 is_model_error = any(p.search(acc_text) for p in ERROR_PATTERNS)
                 if is_model_error:
-                    full_response = ""
+                    full_response = "Maaf, asisten AI saat ini tidak mendukung pemrosesan gambar. Silakan kirim pertanyaan berupa teks."
                     break
 
                 if finish_reason == "stop":

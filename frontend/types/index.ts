@@ -26,6 +26,16 @@ export interface ModelOption {
   pricing?: Record<string, string>
 }
 
+export const REASONING_OPTIONS = ["low", "medium", "high", "max"] as const;
+export const REASONING_LABELS: Record<string, string> = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  max: "Max",
+};
+
+export type ReasoningEffort = (typeof REASONING_OPTIONS)[number];
+
 export const FALLBACK_MODELS: ModelOption[] = [
   { id: "google/gemini-2.0-flash-exp:free", name: "Gemini 2.0 Flash (free)", pricing: { prompt: "0", completion: "0" } },
   { id: "openai/gpt-4o-mini", name: "GPT-4o Mini", pricing: { prompt: "0", completion: "0" } },

@@ -25,6 +25,7 @@ export interface ApiChatRequest {
   model?: string;
   temperature?: number;
   file_ids?: string[];
+  reasoning_effort?: string;
 }
 
 export interface ActionTrigger {
