@@ -14,7 +14,7 @@ logging.basicConfig(
 def create_app() -> FastAPI:
     app = FastAPI(
         title="Centralized AI Chatbot Gateway",
-        description="Orchestrator connecting Gemini 1.5 Pro with raflylabs portfolio, weather, and audio stream systems.",
+        description="Orchestrator connecting LLM (OpenRouter) with raflylabs portfolio, weather, and audio stream systems.",
         version="1.0.0",
     )
 
