@@ -7,6 +7,8 @@ import type { Message } from "@/types";
 export default function MessageBubble({ message }: { message: Message }) {
   const isUser = message.role === "user";
 
+  const processedContent = message.content.replace(/<br\s*\/?>/gi, "\n");
+
   return (
     <div
       className={`animate-fade-in flex w-full ${isUser ? "justify-end" : "justify-start"}`}
@@ -81,9 +83,30 @@ export default function MessageBubble({ message }: { message: Message }) {
                     </blockquote>
                   );
                 },
+                table({ children }) {
+                  return (
+                    <div className="my-2 overflow-x-auto">
+                      <table className="w-full border-collapse border border-border text-left text-sm">
+                        {children}
+                      </table>
+                    </div>
+                  );
+                },
+                th({ children }) {
+                  return (
+                    <th className="border border-border bg-bg-surface px-3 py-2 font-semibold">
+                      {children}
+                    </th>
+                  );
+                },
+                td({ children }) {
+                  return (
+                    <td className="border border-border px-3 py-2">{children}</td>
+                  );
+                },
               }}
             >
-              {message.content}
+              {processedContent}
             </ReactMarkdown>
           )}
         </div>

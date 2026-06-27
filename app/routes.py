@@ -205,7 +205,13 @@ async def chat_message(request: ChatRequest):
 
     except Exception as e:
         logging.error(f"Error calling OpenRouter: {e}")
+        err_str = str(e)
+        is_image_error = any(p.search(err_str) for p in ERROR_PATTERNS)
+        if is_image_error:
+            detail = "Asisten AI saat ini tidak mendukung pemrosesan gambar. Silakan kirim pertanyaan berupa teks."
+        else:
+            detail = f"Terjadi kesalahan saat memproses pesan: {err_str}"
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Terjadi kesalahan saat memproses pesan: {str(e)}",
+            detail=detail,
         )

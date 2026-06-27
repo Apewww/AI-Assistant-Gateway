@@ -28,7 +28,7 @@ AI_MODE = get_env("AI_MODE", "isolated")
 # Comma-separated error patterns to detect model failure
 _ERROR_PATTERNS_RAW = get_env(
     "ERROR_PATTERNS",
-    "does not support image,cannot read,image input,does not support",
+    "does not support image,cannot read,image input,does not support,tidak dapat membaca,tidak mendukung gambar,not support image",
 )
 ERROR_PATTERNS = [re.compile(p.strip(), re.IGNORECASE) for p in _ERROR_PATTERNS_RAW.split(",") if p.strip()]
 
